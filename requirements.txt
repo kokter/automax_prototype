@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+qdrant-client
+sentence-transformers
+torch
+pymorphy3
+rank-bm25
+rapidfuzz
+numpy
+httpx
