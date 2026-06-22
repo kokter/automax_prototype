@@ -1,8 +1,3 @@
-"""Семантический слой: эмбеддинги bge-m3 + векторное хранилище Qdrant.
-
-Мультитенантность: на каждого арендатора — отдельная коллекция Qdrant
-(`catalog__<tenant>`), данные изолированы.
-"""
 import hashlib
 from threading import Lock
 
@@ -17,7 +12,6 @@ _model_lock = Lock()
 
 
 def _get_model():
-    """Ленивая загрузка bge-m3 (скачивается при первом обращении)."""
     global _model
     if _model is None:
         with _model_lock:
@@ -28,7 +22,6 @@ def _get_model():
 
 
 def _fake_vector(text: str) -> np.ndarray:
-    """Детерминированный псевдо-вектор для тестов без нейромодели."""
     seed = int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
     rng = np.random.default_rng(seed)
     v = rng.standard_normal(config.VECTOR_SIZE).astype("float32")

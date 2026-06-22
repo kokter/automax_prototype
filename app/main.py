@@ -15,13 +15,10 @@ from app.search import lexical, semantic, hybrid
 
 app = FastAPI(title="Automax Hybrid Search (MVP)", version="0.1.0")
 
-# Метаданные товаров в памяти: tenant -> {id: {name, description}}.
-# Нужны, чтобы по id из ранжирования собрать карточку для выдачи.
 _catalog: dict[str, dict[str, dict]] = {}
 
 
 def resolve_tenant(api_key: str | None) -> str:
-    """Мультитенантность: по API-ключу определяем арендатора."""
     tenant = config.API_KEYS.get(api_key or "")
     if not tenant:
         raise HTTPException(status_code=401, detail="Неверный или отсутствующий API-ключ (заголовок X-API-Key)")
@@ -37,7 +34,6 @@ def health():
 def index_catalog(req: IndexRequest, x_api_key: str | None = Header(default=None)):
     tenant = resolve_tenant(x_api_key)
     products = req.products
-    # 1) лексический индекс  2) векторный индекс (эмбеддинги -> Qdrant)
     lexical.lexical_store.build(tenant, products)
     semantic.index(tenant, products)
     _catalog[tenant] = {p.id: {"name": p.name, "description": p.description} for p in products}

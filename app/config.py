@@ -4,7 +4,7 @@ import os
 # Qdrant: по умолчанию — Docker. Для быстрых тестов можно ":memory:".
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 
-# Embedding-модель (как в исследовании). Меняется через переменную окружения.
+# Embedding-модель. Меняется через переменную окружения.
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "1024"))  # bge-m3 -> 1024
 

@@ -1,8 +1,3 @@
-"""Лексический слой: морфология (леммы) + опечатки (fuzzy) + BM25.
-
-Хранится в памяти процесса, отдельный индекс на каждого арендатора. В продакшене
-этот слой заменяется на OpenSearch/Manticore; для MVP достаточно in-process BM25.
-"""
 import re
 from functools import lru_cache
 from threading import Lock
@@ -64,7 +59,6 @@ class _TenantIndex:
 
 
 class LexicalStore:
-    """Реестр лексических индексов по арендаторам."""
     def __init__(self):
         self._by_tenant: dict[str, _TenantIndex] = {}
         self._lock = Lock()
