@@ -6,5 +6,6 @@ torch
 pymorphy3
 rank-bm25
 rapidfuzz
+opensearch-py
 numpy
 httpx

@@ -8,5 +8,24 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
 
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: automax_opensearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true   # dev-режим: без TLS/паролей (для прототипа)
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"   # REST API
+    volumes:
+      - opensearch_storage:/usr/share/opensearch/data
+
 volumes:
   qdrant_storage:
+  opensearch_storage:

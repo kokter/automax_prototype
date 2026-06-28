@@ -2,6 +2,12 @@ import re
 from functools import lru_cache
 from threading import Lock
 
+from app import config
+
+
+# ---------------------------------------------------------------------------
+# Запасной backend: BM25 в памяти (pymorphy3 + rank-bm25 + rapidfuzz)
+# ---------------------------------------------------------------------------
 import pymorphy3
 from rank_bm25 import BM25Okapi
 from rapidfuzz import process, fuzz
@@ -58,7 +64,10 @@ class _TenantIndex:
         return [self.ids[i] for i in order if scores[i] > 0][:k]
 
 
-class LexicalStore:
+class InMemoryBackend:
+    """Запасной лексический индекс в оперативной памяти."""
+    name = "in-memory"
+
     def __init__(self):
         self._by_tenant: dict[str, _TenantIndex] = {}
         self._lock = Lock()
@@ -74,4 +83,110 @@ class LexicalStore:
         return idx.search(query, k) if idx else []
 
 
-lexical_store = LexicalStore()
+_RU_MAPPING = {
+    "settings": {
+        "analysis": {
+            "filter": {
+                "ru_stop": {"type": "stop", "stopwords": "_russian_"},
+                "ru_stemmer": {"type": "stemmer", "language": "russian"},
+            },
+            "analyzer": {
+                "ru": {
+                    "type": "custom",
+                    "tokenizer": "standard",
+                    "filter": ["lowercase", "ru_stop", "ru_stemmer"],
+                }
+            },
+        }
+    },
+    "mappings": {
+        "properties": {
+            "id": {"type": "keyword"},
+            "name": {"type": "text", "analyzer": "ru"},
+            "description": {"type": "text", "analyzer": "ru"},
+        }
+    },
+}
+
+
+class OpenSearchBackend:
+    """Лексический поиск на OpenSearch: индекс на арендатора, BM25, морфология, опечатки."""
+    name = "opensearch"
+
+    def __init__(self, url: str):
+        from opensearchpy import OpenSearch  # ленивый импорт
+        self._OpenSearch = OpenSearch
+        self.client = OpenSearch(
+            hosts=[url],
+            http_compress=True,
+            use_ssl=url.startswith("https"),
+            verify_certs=False,
+            ssl_show_warn=False,
+            timeout=30,
+        )
+
+    def _index(self, tenant: str) -> str:
+        # Имя индекса OpenSearch — в нижнем регистре, как и идентификатор арендатора.
+        return f"{config.OPENSEARCH_INDEX_PREFIX}{tenant}".lower()
+
+    def build(self, tenant: str, products):
+        from opensearchpy.helpers import bulk
+        index = self._index(tenant)
+        # Переиндексация: пересоздаём индекс арендатора с нуля.
+        if self.client.indices.exists(index=index):
+            self.client.indices.delete(index=index)
+        self.client.indices.create(index=index, body=_RU_MAPPING)
+        actions = [
+            {
+                "_index": index,
+                "_id": p.id,
+                "_source": {"id": p.id, "name": p.name, "description": p.description},
+            }
+            for p in products
+        ]
+        if actions:
+            bulk(self.client, actions, refresh=True)
+
+    def search(self, tenant: str, query: str, k: int):
+        index = self._index(tenant)
+        if not self.client.indices.exists(index=index):
+            return []
+        body = {
+            "size": k,
+            "_source": False,
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["name^2", "description"],
+                    "fuzziness": "AUTO",   # устойчивость к опечаткам
+                    "operator": "or",
+                }
+            },
+        }
+        res = self.client.search(index=index, body=body)
+        return [hit["_id"] for hit in res["hits"]["hits"]]
+
+
+# ---------------------------------------------------------------------------
+# Выбор backend по конфигурации (с безопасным фолбэком)
+# ---------------------------------------------------------------------------
+def _make_backend():
+    url = config.OPENSEARCH_URL
+    if url and url != ":memory:":
+        try:
+            backend = OpenSearchBackend(url)
+            if backend.client.ping():
+                return backend
+            raise RuntimeError("ping() вернул False")
+        except Exception as e:  # noqa: BLE001
+            print(f"[lexical] OpenSearch недоступен по адресу {url} ({e}); "
+                  f"использую запасной BM25-индекс в памяти.")
+    return InMemoryBackend()
+
+
+lexical_store = _make_backend()
+
+
+def backend_name() -> str:
+    """Активный лексический backend ('opensearch' или 'in-memory') — для /health."""
+    return getattr(lexical_store, "name", "in-memory")

@@ -19,6 +19,12 @@ API_KEYS = {
     "demo-key-second": "second_shop",
 }
 
+# По умолчанию — Docker (http://localhost:9200). Индекс на арендатора: catalog__<tenant>.
+# Для тестов без OpenSearch укажите ":memory:" — тогда лексический слой
+# использует встроенный лёгкий BM25-индекс в памяти (запасной вариант).
+OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
+OPENSEARCH_INDEX_PREFIX = os.getenv("OPENSEARCH_INDEX_PREFIX", "catalog__")
+
 # Сколько кандидатов берём из каждого движка перед объединением.
 CANDIDATES = int(os.getenv("CANDIDATES", "20"))
 # Константа сглаживания RRF.
